@@ -2,7 +2,6 @@ import numpy as np
 import numpy as np
 import random
 import copy
-import time
 
 # future : can change number of straights and take note of winner_tallies
 
@@ -13,8 +12,9 @@ class Board():
     current_player = ''
     registered_player = {}
     num_straight = 4
+    ai_number_of_turns = 0
     EMPTY = '0'
-    AI_SYMBOL = '#'
+    AI_SYMBOL = 'R'
 
     def __init__(self, rows: int = 6, cols: int = 7):
         self.num_row = rows
@@ -65,18 +65,21 @@ class Board():
                 break
 
             if(self.withAI and self.current_player == 'AI'):
-                minmax = MinMaxTree(3, self)
+                minmax = MinMaxTree(5, self)
                 recommendedCol, evalScore = minmax.madeTree
-                end_time = time.time()
                 print("The AI putted the piece on", recommendedCol)
                 self.place_player(self.AI_SYMBOL, recommendedCol)
+                self.ai_number_of_turns += 1
                 print(self.__str__())
             else:
                 print('Current Player: ' + self.current_player)
                 self.set_turn_to(self.current_player)
 
             if(self.check_for_winner(self.registered_player[self.current_player])):
-                print('Congrats, ', self.current_player, '! You won!')
+                print('Congrats,', self.current_player, '! You won!')
+                if self.current_player == 'AI':
+                    print('It beat you in {} turns.'.format(
+                        self.ai_number_of_turns))
                 break
             else:
                 next_player_index = (self.player_order.index(
@@ -86,8 +89,11 @@ class Board():
         print('Game has ended')
 
     def ask_if_with_ai(self):
-        name = input("Play with AI? True/False \n")
-        return bool(name)
+        name = input("Play with AI? Y/N \n")[0].upper()
+        if(name == 'Y'):
+            return True
+        else:
+            return False
 
     def choose_turn_of_ai(self):
         turn_order = int(input("Should AI play 1st or 2nd? 1/2 \n"))
@@ -146,11 +152,6 @@ class Board():
 
     def get_lastest_row(self, col):
         for idx in reversed(range(self.num_row)):
-            # print('*---')
-            # print('col', col)
-            # print('idx', idx)
-            # print("here--", self.board[idx][col])
-            # print('**---')
             if(self.board[idx][col] == self.EMPTY):
                 return idx
         return -1
@@ -164,15 +165,10 @@ class Board():
         return valid_locations
 
     def is_valid_location(self, col):
-        try:
-            latestRow = self.get_lastest_row(col)
-            if(latestRow == -1):
-                return False
-            return self.board[latestRow][col] == self.EMPTY
-        except:
-            print('--------- col:', col)
-            print(self.__str__())
-            print('--------- end:', col)
+        latestRow = self.get_lastest_row(col)
+        if(latestRow == -1):
+            return False
+        return self.board[latestRow][col] == self.EMPTY
 
     def check_if_board_full(self):
         count = 0
@@ -187,8 +183,7 @@ class Board():
     def check_straight_row(self, player: str):
         winningRow = player * self.num_straight
         for row in self.board:
-            if winningRow in row:
-                print("Found!")
+            if winningRow in ''.join(row):
                 return True
         return False
 
@@ -197,7 +192,6 @@ class Board():
         for j in range(self.num_col):
             col = ''.join(self.board[:, j])
             if winningCol in col:
-                print("Found")
                 return True
         return False
 
@@ -229,25 +223,19 @@ class MinMaxTree():
     def __init__(self, max_depth: int, board: Board):
         self.max_depth = max_depth
         self.board = copy.deepcopy(board)
-        self.madeTree = self.minimax(max_depth, board, True)
+        self.madeTree = self.minimax(
+            max_depth, board, True, float('-inf'), float('inf'))
 
     def is_terminal_node(self, board: Board):
         opponent = self.get_opponent_sym(board.AI_SYMBOL)
-        # print("board. player, ", self.winning_move(board, board.AI_SYMBOL))
-        # print("board. opponent, ", self.winning_move(board, opponent))
-        # print("board. valid location, ", board.get_valid_locations())
-        # print("result, ", self.winning_move(board, board.AI_SYMBOL) or self.winning_move(
-        # board, opponent) or len(board.get_valid_locations()) == 0)
         return self.winning_move(board, board.AI_SYMBOL) or self.winning_move(board, opponent) or len(board.get_valid_locations()) == 0
 
     # make it flexible to any
-    def minimax(self, depth, boardObj: Board, isMax):
+    def minimax(self, depth, boardObj: Board, isMax, alpha, beta):
         valid_locations = boardObj.get_valid_locations()
         opponent = self.get_opponent_sym(boardObj.AI_SYMBOL)
         if(depth == 0) or self.is_terminal_node(boardObj):
             if(self.is_terminal_node(boardObj)):
-                # print('terminal')
-                # print(boardObj)
                 if(self.winning_move(boardObj, opponent)):
                     return (None, -10000000000000)
                 elif(self.winning_move(boardObj, boardObj.AI_SYMBOL)):
@@ -266,13 +254,13 @@ class MinMaxTree():
                 copy_board = copy.deepcopy(boardObj)
                 copy_board.place_player(boardObj.AI_SYMBOL, loc)
                 new_score = self.minimax(
-                    depth-1, copy_board, False)[1]
-                # print("max current move: {}, depth: {}".format(loc, depth))
-                # print("inmax", new_score)
-                # print('------------------------')
+                    depth-1, copy_board, False, alpha, beta)[1]
                 if maxScore < new_score:
                     maxScore = new_score
                     column = loc
+                alpha = max(alpha, maxScore)
+                if beta <= alpha:
+                    break
             return column, maxScore
 
         else:
@@ -282,13 +270,13 @@ class MinMaxTree():
                 copy_board = copy.deepcopy(boardObj)
                 boardObj.place_player(opponent, loc)
                 new_score = self.minimax(
-                    depth-1, copy_board, True)[1]
-                # print("min current move: {}, depth: {}".format(loc, depth))
-                # print("inmin", new_score)
-                # print('------------------------')
+                    depth-1, copy_board, True, alpha, beta)[1]
                 if minScore > new_score:
                     minScore = new_score
                     column = loc
+                beta = min(beta, minScore)
+                if beta <= alpha:
+                    break
             return column, minScore
 
     def winning_move(self, boardObj, playerSym):
@@ -373,30 +361,22 @@ class MinMaxTree():
         if (window == playerSym).sum() == 4:
             score += 100
         elif (window == playerSym).sum() == 3 and (window == empty_sym).sum() == 1:
-            score += 5
+            score += 10
         elif (window == playerSym).sum() == 2 and (window == empty_sym).sum() == 2:
             score += 2
 
+        if(window.ndim == 2):
+            diagCount = (np.diag(window) == playerSym).sum()
+            score += diagCount * 10
+            diagCountFlip = (np.diag(np.fliplr(window)) == playerSym).sum()
+            score += diagCountFlip * 10
+
         if (window == opponent).sum() == 3 and (window == empty_sym).sum() == 1:
-            score -= 4
+            score -= 150
+        if (window == opponent).sum() == 2 and (window == empty_sym).sum() == 2:
+            score -= 50
         return score
 
 
-# b1 = Board()
-# b1.register_player('a', '+')
-# b1.register_player('AI', b1.AI_SYMBOL)
-# # b1.withAI = True
-# # b1.choose_turn_of_ai()
-# # b1.init_board()
-# b1.place_player('+', 1)
-# # # b1.place_player('+', 1)
-# # b1.place_player('+', 1)
-# print(b1.board[2, 1])
-
-# tree = MinMaxTree(1, b1)
-# print(tree.madeTree)
-# print(b1)
-
 board = Board()
 board.start_game()
-# print([*range(board.num_row-board.num_straight+1)])
